@@ -1,4 +1,4 @@
-# Ejemplos de Uso de la API
+# Ejemplos de Uso de la API v2.0
 
 ## 🚀 Inicio Rápido
 
@@ -30,20 +30,58 @@ curl http://localhost:8000/health
 {
   "status": "healthy",
   "models_loaded": true,
-  "gpu_available": false
+  "gpu_available": false,
+  "available_methods": ["transformers", "textblob", "vader"],
+  "default_method": "transformers"
 }
 ```
 
-## 📝 Ejemplos de Validación de Textos
+### 3. Ver métodos disponibles
 
-### Ejemplo 1: Texto Positivo
+```bash
+curl http://localhost:8000/methods
+```
+
+**Respuesta esperada:**
+```json
+{
+  "available_methods": {
+    "transformers": {
+      "description": "Modelo BERT multilingüe avanzado (Opción 2 del proyecto)",
+      "advantages": ["Alta precisión", "Multilingüe", "Contexto avanzado"],
+      "disadvantages": ["Más lento", "Requiere más recursos"]
+    },
+    "textblob": {
+      "description": "Análisis rápido y eficiente con TextBlob",
+      "advantages": ["Rápido", "Ligero", "Fácil de usar"],
+      "disadvantages": ["Menos preciso", "Optimizado para inglés"]
+    },
+    "vader": {
+      "description": "Análisis basado en reglas léxicas (VADER)",
+      "advantages": ["Muy rápido", "No requiere modelos", "Bueno para redes sociales"],
+      "disadvantages": ["Basado en reglas", "Menos contexto"]
+    }
+  },
+  "default_method": "transformers",
+  "recommendations": {
+    "transformers": "Para análisis de alta precisión y multilingüe",
+    "textblob": "Para análisis rápido y eficiente",
+    "vader": "Para análisis en tiempo real y redes sociales"
+  }
+}
+```
+
+## 📝 Ejemplos de Validación con Diferentes Métodos
+
+### Ejemplo 1: Usando Transformers (Método por defecto - Opción 2 del proyecto)
 
 ```bash
 curl -X POST "http://localhost:8000/validate" \
      -H "Content-Type: application/json" \
      -d '{
        "text": "¡Me encanta este proyecto! Es muy interesante y útil para la comunidad.",
-       "language": "es"
+       "language": "es",
+       "sentiment_method": "transformers"
      }'
 ```
 
@@ -58,18 +96,102 @@ curl -X POST "http://localhost:8000/validate" \
   "profanity_count": 0,
   "suggestions": ["Tu texto está bien escrito y es apropiado para redes sociales"],
   "corrected_text": "¡Me encanta este proyecto! Es muy interesante y útil para la comunidad.",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "sentiment_method": "transformers",
+  "method_info": {
+    "description": "Modelo BERT multilingüe avanzado (Opción 2 del proyecto)",
+    "advantages": ["Alta precisión", "Multilingüe", "Contexto avanzado"],
+    "disadvantages": ["Más lento", "Requiere más recursos"]
+  },
+  "processing_time": 1.234
 }
 ```
 
-### Ejemplo 2: Texto con Groserías
+### Ejemplo 2: Usando TextBlob (Análisis rápido)
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "Este producto es terrible, no funciona nada bien.",
+       "language": "es",
+       "sentiment_method": "textblob"
+     }'
+```
+
+**Respuesta esperada:**
+```json
+{
+  "original_text": "Este producto es terrible, no funciona nada bien.",
+  "is_offensive": true,
+  "has_profanity": false,
+  "emotion_score": -0.8,
+  "emotion_label": "Muy Negativo",
+  "profanity_count": 0,
+  "suggestions": [
+    "Considera usar palabras más positivas y constructivas",
+    "Evita términos que puedan generar emociones negativas",
+    "Enfócate en soluciones en lugar de problemas"
+  ],
+  "corrected_text": "Este producto es terrible, no funciona nada bien.",
+  "confidence": 0.8,
+  "sentiment_method": "textblob",
+  "method_info": {
+    "description": "Análisis rápido y eficiente con TextBlob",
+    "advantages": ["Rápido", "Ligero", "Fácil de usar"],
+    "disadvantages": ["Menos preciso", "Optimizado para inglés"]
+  },
+  "processing_time": 0.045
+}
+```
+
+### Ejemplo 3: Usando VADER (Análisis en tiempo real)
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "Estoy muy decepcionado con los resultados del proyecto",
+       "language": "es",
+       "sentiment_method": "vader"
+     }'
+```
+
+**Respuesta esperada:**
+```json
+{
+  "original_text": "Estoy muy decepcionado con los resultados del proyecto",
+  "is_offensive": true,
+  "has_profanity": false,
+  "emotion_score": -0.6,
+  "emotion_label": "Negativo",
+  "profanity_count": 0,
+  "suggestions": [
+    "Considera usar palabras más positivas y constructivas",
+    "Evita términos que puedan generar emociones negativas",
+    "Enfócate en soluciones en lugar de problemas"
+  ],
+  "corrected_text": "Estoy muy decepcionado con los resultados del proyecto",
+  "confidence": 0.6,
+  "sentiment_method": "vader",
+  "method_info": {
+    "description": "Análisis basado en reglas léxicas (VADER)",
+    "advantages": ["Muy rápido", "No requiere modelos", "Bueno para redes sociales"],
+    "disadvantages": ["Basado en reglas", "Menos contexto"]
+  },
+  "processing_time": 0.012
+}
+```
+
+### Ejemplo 4: Texto con Groserías (Cualquier método)
 
 ```bash
 curl -X POST "http://localhost:8000/validate" \
      -H "Content-Type: application/json" \
      -d '{
        "text": "Este código es una mierda, el desarrollador es un gilipollas",
-       "language": "es"
+       "language": "es",
+       "sentiment_method": "transformers"
      }'
 ```
 
@@ -88,54 +210,95 @@ curl -X POST "http://localhost:8000/validate" \
     "Considera el impacto de tus palabras en diferentes audiencias"
   ],
   "corrected_text": "Este código es un problema, el desarrollador es una persona",
-  "confidence": 0.6
+  "confidence": 0.6,
+  "sentiment_method": "transformers",
+  "method_info": {...},
+  "processing_time": 1.156
 }
 ```
 
-### Ejemplo 3: Texto Negativo sin Groserías
+## 🔬 Comparación de Métodos
+
+### Comparar todos los métodos con el mismo texto
 
 ```bash
-curl -X POST "http://localhost:8000/validate" \
+# Texto positivo
+text="¡Este proyecto es increíble! Me encanta mucho."
+
+echo "=== TRANSFORMERS ==="
+curl -s -X POST "http://localhost:8000/validate" \
      -H "Content-Type: application/json" \
-     -d '{
-       "text": "Estoy muy decepcionado con los resultados del proyecto",
-       "language": "es"
-     }'
+     -d "{\"text\": \"$text\", \"language\": \"es\", \"sentiment_method\": \"transformers\"}" | jq '.emotion_score, .emotion_label, .processing_time'
+
+echo "=== TEXTBLOB ==="
+curl -s -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d "{\"text\": \"$text\", \"language\": \"es\", \"sentiment_method\": \"textblob\"}" | jq '.emotion_score, .emotion_label, .processing_time'
+
+echo "=== VADER ==="
+curl -s -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d "{\"text\": \"$text\", \"language\": \"es\", \"sentiment_method\": \"vader\"}" | jq '.emotion_score, .emotion_label, .processing_time'
+```
+
+## 📊 Validación en Lote
+
+### Procesar múltiples textos
+
+```bash
+curl -X POST "http://localhost:8000/validate/batch" \
+     -H "Content-Type: application/json" \
+     -G -d "method=transformers" \
+     -d '[
+       "Excelente trabajo equipo!",
+       "Me siento frustrado con los resultados",
+       "Este es un proyecto increíble",
+       "No puedo creer lo mal que está esto"
+     ]'
 ```
 
 **Respuesta esperada:**
 ```json
 {
-  "original_text": "Estoy muy decepcionado con los resultados del proyecto",
-  "is_offensive": true,
-  "has_profanity": false,
-  "emotion_score": 0.3,
-  "emotion_label": "Negativo",
-  "profanity_count": 0,
-  "suggestions": [
-    "Considera usar palabras más positivas y constructivas",
-    "Evita términos que puedan generar emociones negativas",
-    "Enfócate en soluciones en lugar de problemas"
-  ],
-  "corrected_text": "Estoy muy decepcionado con los resultados del proyecto",
-  "confidence": 0.8
+  "method": "transformers",
+  "total_texts": 4,
+  "valid_texts": 4,
+  "results": [
+    {
+      "text": "Excelente trabajo equipo!",
+      "is_offensive": false,
+      "emotion_score": 0.9,
+      "emotion_label": "Muy Positivo",
+      "profanity_count": 0,
+      "valid": true
+    },
+    {
+      "text": "Me siento frustrado con los resultados",
+      "is_offensive": true,
+      "emotion_score": 0.3,
+      "emotion_label": "Negativo",
+      "profanity_count": 0,
+      "valid": true
+    }
+  ]
 }
 ```
 
 ## 🔧 Uso con Python
 
-### Cliente Python Simple
+### Cliente Python con Selección de Método
 
 ```python
 import requests
 import json
 
-def validate_text(text, language="es"):
-    """Valida un texto usando la API"""
+def validate_text(text, language="es", method="transformers"):
+    """Valida un texto usando la API con método específico"""
     url = "http://localhost:8000/validate"
     payload = {
         "text": text,
-        "language": language
+        "language": language,
+        "sentiment_method": method
     }
     
     try:
@@ -146,6 +309,23 @@ def validate_text(text, language="es"):
         print(f"Error en la API: {e}")
         return None
 
+def compare_methods(text):
+    """Compara todos los métodos de análisis para un texto"""
+    methods = ["transformers", "textblob", "vader"]
+    results = {}
+    
+    for method in methods:
+        result = validate_text(text, method=method)
+        if result:
+            results[method] = {
+                "score": result['emotion_score'],
+                "label": result['emotion_label'],
+                "confidence": result['confidence'],
+                "processing_time": result['processing_time']
+            }
+    
+    return results
+
 # Ejemplos de uso
 texts = [
     "¡Excelente trabajo equipo!",
@@ -153,26 +333,31 @@ texts = [
     "Necesito ayuda con mi proyecto"
 ]
 
+print("=== Análisis con Transformers (Opción 2 del proyecto) ===")
 for text in texts:
-    print(f"\n📝 Validando: '{text}'")
-    result = validate_text(text)
+    result = validate_text(text, method="transformers")
     if result:
-        print(f"   Es ofensivo: {result['is_offensive']}")
-        print(f"   Emoción: {result['emotion_label']} ({result['emotion_score']:.2f})")
-        print(f"   Groserías: {result['profanity_count']}")
-        print(f"   Sugerencia: {result['suggestions'][0]}")
+        print(f"Texto: '{text[:50]}...'")
+        print(f"  Score: {result['emotion_score']:.3f} ({result['emotion_label']})")
+        print(f"  Tiempo: {result['processing_time']:.3f}s")
+
+print("\n=== Comparación de Métodos ===")
+comparison = compare_methods("Este proyecto es increíble!")
+for method, data in comparison.items():
+    print(f"{method.upper()}: Score={data['score']:.3f}, Time={data['processing_time']:.3f}s")
 ```
 
 ## 🌐 Uso con JavaScript/Fetch
 
-### Cliente JavaScript
+### Cliente JavaScript con Múltiples Métodos
 
 ```javascript
-async function validateText(text, language = 'es') {
+async function validateText(text, language = 'es', method = 'transformers') {
     const url = 'http://localhost:8000/validate';
     const payload = {
         text: text,
-        language: language
+        language: language,
+        sentiment_method: method
     };
     
     try {
@@ -195,51 +380,139 @@ async function validateText(text, language = 'es') {
     }
 }
 
+async function compareAllMethods(text) {
+    const methods = ['transformers', 'textblob', 'vader'];
+    const results = {};
+    
+    for (const method of methods) {
+        const result = await validateText(text, 'es', method);
+        if (result) {
+            results[method] = {
+                score: result.emotion_score,
+                label: result.emotion_label,
+                confidence: result.confidence,
+                processingTime: result.processing_time
+            };
+        }
+    }
+    
+    return results;
+}
+
 // Ejemplo de uso
 const text = "Este código es increíble, me encanta!";
-validateText(text).then(result => {
+
+// Análisis con método específico
+validateText(text, 'es', 'textblob').then(result => {
     if (result) {
-        console.log('Resultado:', result);
-        console.log('Es ofensivo:', result.is_offensive);
-        console.log('Emoción:', result.emotion_label);
+        console.log('Resultado TextBlob:', result);
+        console.log('Score:', result.emotion_score);
+        console.log('Tiempo:', result.processing_time);
     }
+});
+
+// Comparar todos los métodos
+compareAllMethods(text).then(results => {
+    console.log('Comparación de métodos:', results);
+    
+    // Encontrar el más rápido
+    const fastest = Object.entries(results).reduce((a, b) => 
+        a[1].processingTime < b[1].processingTime ? a : b
+    );
+    console.log('Método más rápido:', fastest[0]);
 });
 ```
 
-## 📊 Análisis en Lote
+## 📈 Análisis de Rendimiento
 
-### Script de Validación Múltiple
+### Script de Benchmark
 
 ```bash
 #!/bin/bash
 
-# Lista de textos a validar
-texts=(
-    "¡Hola! ¿Cómo estás?"
-    "Este producto es terrible"
-    "Me encanta trabajar en este proyecto"
-    "El servicio al cliente es pésimo"
-    "Gracias por tu ayuda"
-)
+echo "🚀 Benchmark de Métodos de Análisis de Sentimientos"
+echo "=================================================="
 
-echo "🧪 Validando ${#texts[@]} textos..."
+text="Este es un texto de prueba para medir el rendimiento de diferentes métodos de análisis de sentimientos."
 
-for text in "${texts[@]}"; do
-    echo -e "\n--- Validando: '$text' ---"
+methods=("transformers" "textblob" "vader")
+iterations=10
+
+for method in "${methods[@]}"; do
+    echo -e "\n🔍 Probando método: $method"
+    times=()
     
-    result=$(curl -s -X POST "http://localhost:8000/validate" \
-        -H "Content-Type: application/json" \
-        -d "{\"text\": \"$text\", \"language\": \"es\"}")
+    for i in $(seq 1 $iterations); do
+        start_time=$(date +%s.%N)
+        
+        response=$(curl -s -X POST "http://localhost:8000/validate" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \"$text\", \"language\": \"es\", \"sentiment_method\": \"$method\"}")
+        
+        end_time=$(date +%s.%N)
+        
+        # Calcular tiempo
+        elapsed=$(echo "$end_time - $start_time" | bc)
+        times+=($elapsed)
+        
+        echo "  Ejecución $i: ${elapsed}s"
+    done
     
-    if [ $? -eq 0 ]; then
-        echo "✅ Éxito"
-        echo "   Es ofensivo: $(echo $result | jq -r '.is_offensive')"
-        echo "   Emoción: $(echo $result | jq -r '.emotion_label')"
-        echo "   Groserías: $(echo $result | jq -r '.profanity_count')"
-    else
-        echo "❌ Error en la validación"
-    fi
+    # Calcular promedio
+    total=0
+    for t in "${times[@]}"; do
+        total=$(echo "$total + $t" | bc)
+    done
+    avg=$(echo "scale=3; $total / ${#times[@]}" | bc)
+    
+    echo "  ⏱️  Tiempo promedio: ${avg}s"
 done
+
+echo -e "\n🏁 Benchmark completado!"
+```
+
+## 🎯 Casos de Uso por Método
+
+### 1. Transformers (BERT) - Opción 2 del proyecto
+- **Cuándo usar**: Análisis de alta precisión, textos en español, contexto importante
+- **Ejemplo**: Revisar posts importantes antes de publicar en redes sociales profesionales
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "Nuestro nuevo producto revoluciona el mercado con tecnología de vanguardia",
+       "language": "es",
+       "sentiment_method": "transformers"
+     }'
+```
+
+### 2. TextBlob - Análisis rápido
+- **Cuándo usar**: Análisis en tiempo real, múltiples textos, recursos limitados
+- **Ejemplo**: Moderación de comentarios en tiempo real
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "Great product, I love it!",
+       "language": "en",
+       "sentiment_method": "textblob"
+     }'
+```
+
+### 3. VADER - Tiempo real
+- **Cuándo usar**: Análisis instantáneo, redes sociales, textos cortos
+- **Ejemplo**: Validación de tweets antes de publicar
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "¡Increíble día! #feliz #contento",
+       "language": "es",
+       "sentiment_method": "vader"
+     }'
 ```
 
 ## 🔍 Monitoreo y Debugging
@@ -253,21 +526,54 @@ curl http://localhost:8000/health
 # Información general
 curl http://localhost:8000/
 
+# Métodos disponibles
+curl http://localhost:8000/methods
+
+# Comparación de métodos
+curl http://localhost:8000/compare
+
 # Logs del servidor (en la terminal donde ejecutaste main.py)
 ```
 
 ### Métricas de Rendimiento
 
 ```bash
-# Medir tiempo de respuesta
+# Medir tiempo de respuesta por método
 time curl -X POST "http://localhost:8000/validate" \
      -H "Content-Type: application/json" \
-     -d '{"text": "Texto de prueba", "language": "es"}'
+     -d '{"text": "Texto de prueba", "language": "es", "sentiment_method": "transformers"}'
+
+time curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Texto de prueba", "language": "es", "sentiment_method": "textblob"}'
+
+time curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Texto de prueba", "language": "es", "sentiment_method": "vader"}'
 ```
 
 ## 🚨 Casos de Error
 
-### Texto Vacío
+### Método no válido
+
+```bash
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "Texto de prueba",
+       "language": "es",
+       "sentiment_method": "metodo_invalido"
+     }'
+```
+
+**Respuesta esperada:**
+```json
+{
+  "detail": "Método 'metodo_invalido' no válido. Métodos disponibles: ['transformers', 'textblob', 'vader']"
+}
+```
+
+### Texto vacío
 
 ```bash
 curl -X POST "http://localhost:8000/validate" \
@@ -282,78 +588,29 @@ curl -X POST "http://localhost:8000/validate" \
 }
 ```
 
-### Texto Demasiado Largo
+## 🎉 Resumen de Nuevas Funcionalidades
 
-```bash
-# Generar texto de más de 1000 caracteres
-long_text=$(printf 'a%.0s' {1..1001})
+### ✨ **API v2.0 - Características Principales:**
 
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d "{\"text\": \"$long_text\", \"language\": \"es\"}"
-```
+1. **Múltiples Métodos de Análisis**:
+   - **Transformers (BERT)**: Opción 2 del proyecto existente - Alta precisión
+   - **TextBlob**: Análisis rápido y eficiente
+   - **VADER**: Análisis en tiempo real para redes sociales
 
-**Respuesta esperada:**
-```json
-{
-  "detail": "El texto es demasiado largo (máximo 1000 caracteres)"
-}
-```
+2. **Nuevos Endpoints**:
+   - `/methods` - Información detallada de métodos
+   - `/compare` - Comparación de métodos
+   - `/validate/batch` - Validación en lote
 
-## 🎯 Casos de Uso Comunes
+3. **Métricas Mejoradas**:
+   - Tiempo de procesamiento por método
+   - Información del método utilizado
+   - Comparación de rendimiento
 
-### 1. Validación de Posts de Redes Sociales
-
-```bash
-# Antes de publicar en Twitter
-text="¡Qué día tan horrible! Todo está saliendo mal"
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d "{\"text\": \"$text\", \"language\": \"es\"}"
-```
-
-### 2. Revisión de Comentarios
-
-```bash
-# Validar comentario antes de aprobarlo
-comment="Este artículo es muy útil, gracias por compartirlo"
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d "{\"text\": \"$comment\", \"language\": \"es\"}"
-```
-
-### 3. Análisis de Feedback
-
-```bash
-# Analizar feedback de usuarios
-feedback="El producto funciona bien pero podría mejorar"
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d "{\"text\": \"$feedback\", \"language\": \"es\"}"
-```
-
-## 🔧 Personalización
-
-### Cambiar Idioma (si se implementa en el futuro)
-
-```bash
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "text": "This is a test message",
-       "language": "en"
-     }'
-```
-
-### Headers Personalizados
-
-```bash
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -H "User-Agent: MyApp/1.0" \
-     -H "X-API-Key: my-key" \
-     -d '{"text": "Texto de prueba", "language": "es"}'
-```
+4. **Flexibilidad**:
+   - Selección de método por solicitud
+   - Análisis adaptativo según necesidades
+   - Compatibilidad con el proyecto existente
 
 ---
 
@@ -362,5 +619,5 @@ curl -X POST "http://localhost:8000/validate" \
 ```bash
 curl -s -X POST "http://localhost:8000/validate" \
      -H "Content-Type: application/json" \
-     -d '{"text": "Texto de prueba", "language": "es"}' | jq '.'
+     -d '{"text": "Texto de prueba", "language": "es", "sentiment_method": "textblob"}' | jq '.'
 ``` 

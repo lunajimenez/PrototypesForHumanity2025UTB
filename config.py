@@ -8,13 +8,35 @@ SERVER_PORT = 8000
 DEBUG = True
 
 # Configuración de modelos
-SENTIMENT_MODEL = "nlptown/bert-base-multilingual-uncased-sentiment"
+SENTIMENT_MODELS = {
+    "transformers": "nlptown/bert-base-multilingual-uncased-sentiment",
+    "textblob": "textblob",
+    "vader": "vader"
+}
+
+DEFAULT_SENTIMENT_METHOD = "transformers"  # Opción 2 del proyecto existente
 MAX_TEXT_LENGTH = 1000
+
+# Umbrales para diferentes métodos
 EMOTION_THRESHOLDS = {
-    "very_negative": 0.2,
-    "negative": 0.4,
-    "neutral": 0.6,
-    "positive": 0.8
+    "transformers": {
+        "very_negative": 0.2,
+        "negative": 0.4,
+        "neutral": 0.6,
+        "positive": 0.8
+    },
+    "textblob": {
+        "very_negative": -0.6,
+        "negative": -0.1,
+        "neutral": 0.1,
+        "positive": 0.6
+    },
+    "vader": {
+        "very_negative": -0.5,
+        "negative": -0.1,
+        "neutral": 0.1,
+        "positive": 0.5
+    }
 }
 
 # Configuración de groserías
@@ -73,4 +95,23 @@ SUGGESTION_TEMPLATES = {
 # Configuración de CORS
 CORS_ORIGINS = ["*"]
 CORS_METHODS = ["*"]
-CORS_HEADERS = ["*"] 
+CORS_HEADERS = ["*"]
+
+# Configuración de análisis de sentimientos
+SENTIMENT_ANALYSIS_CONFIG = {
+    "transformers": {
+        "description": "Modelo BERT multilingüe avanzado (Opción 2 del proyecto)",
+        "advantages": ["Alta precisión", "Multilingüe", "Contexto avanzado"],
+        "disadvantages": ["Más lento", "Requiere más recursos"]
+    },
+    "textblob": {
+        "description": "Análisis rápido y eficiente con TextBlob",
+        "advantages": ["Rápido", "Ligero", "Fácil de usar"],
+        "disadvantages": ["Menos preciso", "Optimizado para inglés"]
+    },
+    "vader": {
+        "description": "Análisis basado en reglas léxicas (VADER)",
+        "advantages": ["Muy rápido", "No requiere modelos", "Bueno para redes sociales"],
+        "disadvantages": ["Basado en reglas", "Menos contexto"]
+    }
+} 

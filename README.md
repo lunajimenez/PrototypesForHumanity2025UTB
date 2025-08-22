@@ -1,23 +1,29 @@
-# API de Validación de Textos para Redes Sociales
+# API de Validación de Textos para Redes Sociales v2.0
 
-Una API inteligente construida con FastAPI que integra **transformers** de Hugging Face y **spanlp** para validar textos antes de publicarlos en redes sociales. Detecta emociones negativas y groserías, proporcionando sugerencias de mejora y versiones corregidas.
+Una API inteligente construida con FastAPI que integra **múltiples métodos de análisis de sentimientos** para validar textos antes de publicarlos en redes sociales. Detecta emociones negativas y groserías, proporcionando sugerencias de mejora y versiones corregidas.
 
 ## 🚀 Características
 
-- **Análisis de Sentimientos**: Detecta emociones negativas usando modelos de transformers
+- **Análisis de Sentimientos Multi-Método**: 
+  - **Transformers (BERT)**: Modelo avanzado multilingüe (Opción 2 del proyecto existente)
+  - **TextBlob**: Análisis rápido y eficiente
+  - **VADER**: Análisis en tiempo real para redes sociales
 - **Detección de Groserías**: Identifica lenguaje inapropiado usando spanlp
 - **Sugerencias Inteligentes**: Proporciona recomendaciones personalizadas para mejorar el texto
 - **Corrección Automática**: Genera versiones corregidas del texto
 - **API RESTful**: Endpoints simples y eficientes
 - **Documentación Automática**: Swagger UI integrado
 - **Validación en Tiempo Real**: Respuestas rápidas para uso en aplicaciones web
+- **Validación en Lote**: Procesa múltiples textos simultáneamente
+- **Comparación de Métodos**: Analiza rendimiento y precisión de cada método
 
 ## 🏗️ Arquitectura
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   FastAPI App   │───▶│  Transformers    │    │     spanlp      │
-│                 │    │  (Sentiment)     │    │  (Profanity)    │
+│   FastAPI App   │───▶│  Múltiples       │    │     spanlp      │
+│                 │    │  Métodos de      │    │  (Profanity)    │
+│                 │    │  Análisis        │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
@@ -33,6 +39,24 @@ Una API inteligente construida con FastAPI que integra **transformers** de Huggi
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
+### Métodos de Análisis Disponibles
+
+1. **Transformers (BERT)** - Opción 2 del proyecto existente
+   - Modelo: `nlptown/bert-base-multilingual-uncased-sentiment`
+   - Ventajas: Alta precisión, multilingüe, contexto avanzado
+   - Desventajas: Más lento, requiere más recursos
+   - Recomendado para: Análisis de alta precisión y multilingüe
+
+2. **TextBlob**
+   - Ventajas: Rápido, ligero, fácil de usar
+   - Desventajas: Menos preciso, optimizado para inglés
+   - Recomendado para: Análisis rápido y eficiente
+
+3. **VADER**
+   - Ventajas: Muy rápido, no requiere modelos, bueno para redes sociales
+   - Desventajas: Basado en reglas, menos contexto
+   - Recomendado para: Análisis en tiempo real y redes sociales
+
 ## 📋 Requisitos
 
 - Python 3.8+
@@ -40,7 +64,13 @@ Una API inteligente construida con FastAPI que integra **transformers** de Huggi
 - Transformers (Hugging Face)
 - PyTorch
 - spanlp
+- textblob
+- vaderSentiment
 - uvicorn
+- pandas
+- matplotlib
+- wordcloud
+- nltk
 
 ## 🛠️ Instalación
 
@@ -81,24 +111,27 @@ La API estará disponible en `http://localhost:8000`
 ### 3. Endpoints Disponibles
 
 #### GET `/`
-Información general de la API
+Información general de la API con métodos disponibles
 
 #### GET `/health`
 Estado de salud y disponibilidad de modelos
 
+#### GET `/methods`
+Información detallada sobre métodos de análisis disponibles
+
+#### GET `/compare`
+Comparación de métodos de análisis de sentimientos
+
 #### POST `/validate`
 Valida un texto y retorna análisis completo
 
-**Ejemplo de uso**:
-```bash
-curl -X POST "http://localhost:8000/validate" \
-     -H "Content-Type: application/json" \
-     -d '{"text": "Este producto es una mierda!", "language": "es"}'
-```
+#### POST `/validate/batch`
+Valida múltiples textos en lote
 
 ## 📊 Ejemplos de Respuesta
 
-### Texto Positivo
+### Texto con Transformers (Método por defecto)
+
 ```json
 {
   "original_text": "¡Me encanta este proyecto! Es increíble.",
@@ -109,11 +142,41 @@ curl -X POST "http://localhost:8000/validate" \
   "profanity_count": 0,
   "suggestions": ["Tu texto está bien escrito y es apropiado para redes sociales"],
   "corrected_text": "¡Me encanta este proyecto! Es increíble.",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "sentiment_method": "transformers",
+  "method_info": {
+    "description": "Modelo BERT multilingüe avanzado (Opción 2 del proyecto)",
+    "advantages": ["Alta precisión", "Multilingüe", "Contexto avanzado"],
+    "disadvantages": ["Más lento", "Requiere más recursos"]
+  },
+  "processing_time": 1.234
 }
 ```
 
-### Texto con Groserías
+### Texto con TextBlob
+
+```json
+{
+  "original_text": "Este producto es terrible, no funciona nada bien.",
+  "is_offensive": true,
+  "has_profanity": false,
+  "emotion_score": -0.8,
+  "emotion_label": "Muy Negativo",
+  "profanity_count": 0,
+  "suggestions": [
+    "Considera usar palabras más positivas y constructivas",
+    "Evita términos que puedan generar emociones negativas"
+  ],
+  "corrected_text": "Este producto es terrible, no funciona nada bien.",
+  "confidence": 0.8,
+  "sentiment_method": "textblob",
+  "method_info": {...},
+  "processing_time": 0.045
+}
+```
+
+### Texto con Groserías (Cualquier método)
+
 ```json
 {
   "original_text": "Este código es una mierda, el desarrollador es un gilipollas",
@@ -124,11 +187,13 @@ curl -X POST "http://localhost:8000/validate" \
   "profanity_count": 2,
   "suggestions": [
     "Reemplaza las groserías con palabras más apropiadas",
-    "Usa un lenguaje más profesional y respetuoso",
-    "Considera el impacto de tus palabras en diferentes audiencias"
+    "Usa un lenguaje más profesional y respetuoso"
   ],
   "corrected_text": "Este código es un problema, el desarrollador es una persona",
-  "confidence": 0.6
+  "confidence": 0.6,
+  "sentiment_method": "transformers",
+  "method_info": {...},
+  "processing_time": 1.156
 }
 ```
 
@@ -142,20 +207,51 @@ python test_api.py
 
 Este script incluye:
 - Verificación de salud de la API
+- Información de métodos disponibles
+- Comparación de métodos
 - Casos de prueba con diferentes tipos de texto
 - Validación en lote
-- Métricas de rendimiento
+- Comparación de rendimiento entre métodos
+- Métricas de tiempo de procesamiento
 
 ## ⚙️ Configuración
 
 Puedes personalizar la API editando `config.py`:
 
-- **Modelos**: Cambiar el modelo de análisis de sentimientos
-- **Umbrales**: Ajustar los límites para clasificación de emociones
+- **Modelos**: Configurar diferentes métodos de análisis
+- **Umbrales**: Ajustar los límites para clasificación de emociones por método
 - **Reemplazos**: Modificar las palabras de sustitución para groserías
 - **Sugerencias**: Personalizar los mensajes de recomendación
 
 ## 🔧 Personalización
+
+### Seleccionar Método de Análisis
+
+```bash
+# Usar Transformers (por defecto)
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Tu texto", "sentiment_method": "transformers"}'
+
+# Usar TextBlob para análisis rápido
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Tu texto", "sentiment_method": "textblob"}'
+
+# Usar VADER para tiempo real
+curl -X POST "http://localhost:8000/validate" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Tu texto", "sentiment_method": "vader"}'
+```
+
+### Validación en Lote
+
+```bash
+curl -X POST "http://localhost:8000/validate/batch" \
+     -H "Content-Type: application/json" \
+     -G -d "method=transformers" \
+     -d '["Texto 1", "Texto 2", "Texto 3"]'
+```
 
 ### Agregar Nuevas Groserías
 
@@ -167,31 +263,23 @@ PROFANITY_REPLACEMENTS = {
 }
 ```
 
-### Modificar Umbrales de Emoción
-
-```python
-# En config.py
-EMOTION_THRESHOLDS = {
-    "very_negative": 0.15,  # Más estricto
-    "negative": 0.35,
-    "neutral": 0.65,
-    "positive": 0.85
-}
-```
-
 ## 📈 Métricas de Rendimiento
 
-- **Tiempo de respuesta**: < 2 segundos por texto
+- **Transformers**: ~1-2 segundos por texto (alta precisión)
+- **TextBlob**: ~0.05-0.1 segundos por texto (rápido)
+- **VADER**: ~0.01-0.05 segundos por texto (muy rápido)
 - **Precisión**: > 90% en detección de groserías
 - **Escalabilidad**: Soporta múltiples solicitudes concurrentes
 - **Memoria**: ~2GB RAM para modelos cargados
 
 ## 🚨 Limitaciones
 
-- **Idioma**: Optimizado para español
+- **Idioma**: Transformers optimizado para español, TextBlob para inglés
 - **Longitud**: Máximo 1000 caracteres por texto
-- **Modelos**: Requiere descarga inicial de modelos (~500MB)
-- **GPU**: Opcional, funciona en CPU
+- **Modelos**: Transformers requiere descarga inicial (~500MB)
+- **GPU**: Opcional para Transformers, funciona en CPU
+- **TextBlob**: Menos preciso en español
+- **VADER**: Basado en reglas léxicas
 
 ## 🤝 Contribuciones
 
@@ -216,13 +304,35 @@ Si tienes problemas o preguntas:
 
 ## 🔮 Roadmap
 
-- [ ] Soporte para múltiples idiomas
+- [x] Integración de múltiples métodos de análisis
+- [x] Validación en lote
+- [x] Comparación de métodos
+- [x] Métricas de rendimiento
+- [ ] Soporte para múltiples idiomas mejorado
 - [ ] Análisis de contexto más avanzado
 - [ ] Integración con APIs de redes sociales
 - [ ] Dashboard de análisis en tiempo real
 - [ ] Modelos personalizables por usuario
 - [ ] Cache inteligente para mejorar rendimiento
+- [ ] API de recomendaciones personalizadas
+
+## 🎯 Casos de Uso Recomendados
+
+### Transformers (BERT)
+- **Cuándo usar**: Análisis de alta precisión, textos en español, contexto importante
+- **Ejemplo**: Revisar posts importantes antes de publicar en redes sociales profesionales
+
+### TextBlob
+- **Cuándo usar**: Análisis en tiempo real, múltiples textos, recursos limitados
+- **Ejemplo**: Moderación de comentarios en tiempo real
+
+### VADER
+- **Cuándo usar**: Análisis instantáneo, redes sociales, textos cortos
+- **Ejemplo**: Validación de tweets antes de publicar
 
 ---
 
-**¡Haz que tus publicaciones en redes sociales sean más profesionales y respetuosas!** 🚀
+**¡Haz que tus publicaciones en redes sociales sean más profesionales y respetuosas con análisis inteligente multi-método!** 🚀
+
+**Versión**: 2.0.0  
+**Última actualización**: Integración completa con proyecto existente + TextBlob + VADER

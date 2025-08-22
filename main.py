@@ -1,18 +1,26 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import torch
 from transformers import pipeline
 from spanlp.palabrotas import Palabrotas
 from spanlp.normalizer import Normalizer
+from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import re
+import time
+from config import SENTIMENT_MODELS, DEFAULT_SENTIMENT_METHOD, SENTIMENT_ANALYSIS_CONFIG
+from utils import (
+    get_emotion_label, generate_suggestions, correct_text, 
+    calculate_confidence, validate_input, get_method_info, compare_methods
+)
 
 # Configuración de la API
 app = FastAPI(
     title="API de Validación de Textos para Redes Sociales",
-    description="API que valida textos para detectar emociones negativas y groserías antes de publicar en redes sociales",
-    version="1.0.0"
+    description="API que valida textos para detectar emociones negativas y groserías antes de publicar en redes sociales. Integra múltiples métodos de análisis: Transformers (BERT), TextBlob y VADER.",
+    version="2.0.0"
 )
 
 # Configurar CORS
@@ -28,6 +36,7 @@ app.add_middleware(
 class TextRequest(BaseModel):
     text: str
     language: str = "es"
+    sentiment_method: Optional[str] = DEFAULT_SENTIMENT_METHOD
 
 class TextResponse(BaseModel):
     original_text: str
@@ -39,14 +48,21 @@ class TextResponse(BaseModel):
     suggestions: List[str]
     corrected_text: str
     confidence: float
+    sentiment_method: str
+    method_info: Dict[str, Any]
+    processing_time: float
+
+class MethodComparisonResponse(BaseModel):
+    methods: Dict[str, Any]
+    recommended: str
 
 # Inicializar modelos
-print("Cargando modelos...")
+print("Cargando modelos de análisis de sentimientos...")
 
-# Modelo de análisis de sentimientos en español
+# Modelo de análisis de sentimientos en español (Opción 2 del proyecto)
 sentiment_analyzer = pipeline(
     "sentiment-analysis",
-    model="nlptown/bert-base-multilingual-uncased-sentiment",
+    model=SENTIMENT_MODELS["transformers"],
     device=0 if torch.cuda.is_available() else -1
 )
 
@@ -54,10 +70,13 @@ sentiment_analyzer = pipeline(
 profanity_detector = Palabrotas()
 normalizer = Normalizer()
 
+# Inicializar VADER para análisis rápido
+vader_analyzer = SentimentIntensityAnalyzer()
+
 print("Modelos cargados exitosamente!")
 
-def analyze_emotion(text: str) -> Dict[str, Any]:
-    """Analiza la emoción del texto usando transformers"""
+def analyze_emotion_transformers(text: str) -> Dict[str, Any]:
+    """Analiza la emoción del texto usando transformers (Opción 2 del proyecto)"""
     try:
         # Normalizar el texto
         normalized_text = normalizer.normalize(text)
@@ -68,30 +87,83 @@ def analyze_emotion(text: str) -> Dict[str, Any]:
         # Convertir puntuación de 1-5 a 0-1
         score = float(result[0]['label'].split()[0]) / 5.0
         
-        # Determinar etiqueta de emoción
-        if score <= 0.2:
-            emotion_label = "Muy Negativo"
-        elif score <= 0.4:
-            emotion_label = "Negativo"
-        elif score <= 0.6:
-            emotion_label = "Neutral"
-        elif score <= 0.8:
-            emotion_label = "Positivo"
-        else:
-            emotion_label = "Muy Positivo"
-        
         return {
             "score": score,
-            "label": emotion_label,
-            "confidence": result[0]['score']
+            "label": get_emotion_label(score, "transformers"),
+            "confidence": result[0]['score'],
+            "method": "transformers"
         }
     except Exception as e:
-        print(f"Error en análisis de emoción: {e}")
+        print(f"Error en análisis de emoción con transformers: {e}")
         return {
             "score": 0.5,
             "label": "Neutral",
-            "confidence": 0.0
+            "confidence": 0.0,
+            "method": "transformers"
         }
+
+def analyze_emotion_textblob(text: str) -> Dict[str, Any]:
+    """Analiza la emoción del texto usando TextBlob"""
+    try:
+        # Crear objeto TextBlob
+        blob = TextBlob(text)
+        
+        # Obtener polaridad (-1 a 1) y subjetividad (0 a 1)
+        polarity = blob.sentiment.polarity
+        subjectivity = blob.sentiment.subjectivity
+        
+        return {
+            "score": polarity,
+            "label": get_emotion_label(polarity, "textblob"),
+            "confidence": abs(polarity) + (1 - subjectivity) / 2,  # Combinar polaridad y subjetividad
+            "method": "textblob",
+            "subjectivity": subjectivity
+        }
+    except Exception as e:
+        print(f"Error en análisis de emoción con TextBlob: {e}")
+        return {
+            "score": 0.0,
+            "label": "Neutral",
+            "confidence": 0.0,
+            "method": "textblob"
+        }
+
+def analyze_emotion_vader(text: str) -> Dict[str, Any]:
+    """Analiza la emoción del texto usando VADER"""
+    try:
+        # Analizar sentimiento con VADER
+        scores = vader_analyzer.polarity_scores(text)
+        
+        # Obtener score compuesto (-1 a 1)
+        compound_score = scores['compound']
+        
+        return {
+            "score": compound_score,
+            "label": get_emotion_label(compound_score, "vader"),
+            "confidence": abs(compound_score),
+            "method": "vader",
+            "detailed_scores": scores
+        }
+    except Exception as e:
+        print(f"Error en análisis de emoción con VADER: {e}")
+        return {
+            "score": 0.0,
+            "label": "Neutral",
+            "confidence": 0.0,
+            "method": "vader"
+        }
+
+def analyze_emotion(text: str, method: str = DEFAULT_SENTIMENT_METHOD) -> Dict[str, Any]:
+    """Analiza la emoción del texto usando el método especificado"""
+    if method == "transformers":
+        return analyze_emotion_transformers(text)
+    elif method == "textblob":
+        return analyze_emotion_textblob(text)
+    elif method == "vader":
+        return analyze_emotion_vader(text)
+    else:
+        print(f"Método '{method}' no reconocido, usando transformers por defecto")
+        return analyze_emotion_transformers(text)
 
 def detect_profanity(text: str) -> Dict[str, Any]:
     """Detecta groserías usando spanlp"""
@@ -121,79 +193,21 @@ def detect_profanity(text: str) -> Dict[str, Any]:
             "profanity_words": []
         }
 
-def generate_suggestions(text: str, emotion_score: float, profanity_count: int) -> List[str]:
-    """Genera sugerencias para mejorar el texto"""
-    suggestions = []
-    
-    # Sugerencias basadas en emociones negativas
-    if emotion_score < 0.4:
-        suggestions.append("Considera usar palabras más positivas y constructivas")
-        suggestions.append("Evita términos que puedan generar emociones negativas")
-        suggestions.append("Enfócate en soluciones en lugar de problemas")
-    
-    # Sugerencias basadas en groserías
-    if profanity_count > 0:
-        suggestions.append("Reemplaza las groserías con palabras más apropiadas")
-        suggestions.append("Usa un lenguaje más profesional y respetuoso")
-        suggestions.append("Considera el impacto de tus palabras en diferentes audiencias")
-    
-    # Sugerencias generales
-    if len(text) > 280:  # Límite de Twitter
-        suggestions.append("El texto es muy largo, considera dividirlo en partes")
-    
-    if not suggestions:
-        suggestions.append("Tu texto está bien escrito y es apropiado para redes sociales")
-    
-    return suggestions
-
-def correct_text(text: str, profanity_words: List[str]) -> str:
-    """Corrige el texto reemplazando groserías"""
-    corrected_text = text
-    
-    # Diccionario de reemplazos para groserías comunes
-    replacements = {
-        "puta": "persona",
-        "mierda": "problema",
-        "cabrón": "persona",
-        "gilipollas": "persona",
-        "hijo de puta": "persona",
-        "coño": "expresión",
-        "joder": "expresión",
-        "follar": "expresión",
-        "polla": "expresión",
-        "pene": "expresión",
-        "vagina": "expresión",
-        "teta": "expresión",
-        "culo": "expresión",
-        "pendejo": "persona",
-        "pendeja": "persona",
-        "güey": "amigo",
-        "wey": "amigo",
-        "guey": "amigo"
-    }
-    
-    # Aplicar reemplazos
-    for profanity in profanity_words:
-        if profanity.lower() in replacements:
-            corrected_text = re.sub(
-                re.escape(profanity), 
-                replacements[profanity.lower()], 
-                corrected_text, 
-                flags=re.IGNORECASE
-            )
-    
-    return corrected_text
-
 @app.get("/")
 async def root():
     """Endpoint raíz con información de la API"""
     return {
-        "message": "API de Validación de Textos para Redes Sociales",
-        "version": "1.0.0",
+        "message": "API de Validación de Textos para Redes Sociales v2.0",
+        "version": "2.0.0",
+        "description": "Integra múltiples métodos de análisis de sentimientos: Transformers (BERT), TextBlob y VADER",
         "endpoints": {
             "/validate": "POST - Valida un texto",
-            "/health": "GET - Estado de salud de la API"
-        }
+            "/health": "GET - Estado de salud de la API",
+            "/methods": "GET - Información sobre métodos de análisis",
+            "/compare": "GET - Comparación de métodos"
+        },
+        "default_method": DEFAULT_SENTIMENT_METHOD,
+        "available_methods": list(SENTIMENT_MODELS.keys())
     }
 
 @app.get("/health")
@@ -202,22 +216,52 @@ async def health_check():
     return {
         "status": "healthy",
         "models_loaded": True,
-        "gpu_available": torch.cuda.is_available()
+        "gpu_available": torch.cuda.is_available(),
+        "available_methods": list(SENTIMENT_MODELS.keys()),
+        "default_method": DEFAULT_SENTIMENT_METHOD
     }
+
+@app.get("/methods")
+async def get_methods():
+    """Obtiene información sobre los métodos de análisis disponibles"""
+    return {
+        "available_methods": SENTIMENT_ANALYSIS_CONFIG,
+        "default_method": DEFAULT_SENTIMENT_METHOD,
+        "recommendations": {
+            "transformers": "Para análisis de alta precisión y multilingüe",
+            "textblob": "Para análisis rápido y eficiente",
+            "vader": "Para análisis en tiempo real y redes sociales"
+        }
+    }
+
+@app.get("/compare")
+async def compare_analysis_methods():
+    """Compara los diferentes métodos de análisis de sentimientos"""
+    return MethodComparisonResponse(
+        methods=compare_methods(),
+        recommended=DEFAULT_SENTIMENT_METHOD
+    )
 
 @app.post("/validate", response_model=TextResponse)
 async def validate_text(request: TextRequest):
     """Valida un texto para detectar emociones negativas y groserías"""
+    start_time = time.time()
+    
     try:
         # Validar entrada
-        if not request.text.strip():
-            raise HTTPException(status_code=400, detail="El texto no puede estar vacío")
+        validation_result = validate_input(request.text)
+        if not validation_result["is_valid"]:
+            raise HTTPException(status_code=400, detail=validation_result["errors"][0])
         
-        if len(request.text) > 1000:
-            raise HTTPException(status_code=400, detail="El texto es demasiado largo (máximo 1000 caracteres)")
+        # Validar método de análisis
+        if request.sentiment_method not in SENTIMENT_MODELS:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Método '{request.sentiment_method}' no válido. Métodos disponibles: {list(SENTIMENT_MODELS.keys())}"
+            )
         
         # Analizar emoción
-        emotion_result = analyze_emotion(request.text)
+        emotion_result = analyze_emotion(request.text, request.sentiment_method)
         
         # Detectar groserías
         profanity_result = detect_profanity(request.text)
@@ -229,15 +273,25 @@ async def validate_text(request: TextRequest):
         suggestions = generate_suggestions(
             request.text, 
             emotion_result["score"], 
-            profanity_result["profanity_count"]
+            profanity_result["profanity_count"],
+            request.sentiment_method
         )
         
         # Corregir texto
         corrected_text = correct_text(request.text, profanity_result["profanity_words"])
         
         # Calcular confianza general
-        confidence = (emotion_result["confidence"] + (1.0 - profanity_result["profanity_count"] * 0.1)) / 2
-        confidence = max(0.0, min(1.0, confidence))
+        confidence = calculate_confidence(
+            emotion_result["confidence"], 
+            profanity_result["profanity_count"],
+            request.sentiment_method
+        )
+        
+        # Obtener información del método
+        method_info = get_method_info(request.sentiment_method)
+        
+        # Calcular tiempo de procesamiento
+        processing_time = time.time() - start_time
         
         return TextResponse(
             original_text=request.text,
@@ -248,12 +302,69 @@ async def validate_text(request: TextRequest):
             profanity_count=profanity_result["profanity_count"],
             suggestions=suggestions,
             corrected_text=corrected_text,
-            confidence=confidence
+            confidence=confidence,
+            sentiment_method=request.sentiment_method,
+            method_info=method_info,
+            processing_time=processing_time
         )
         
     except Exception as e:
         print(f"Error en validación: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+@app.post("/validate/batch")
+async def validate_texts_batch(texts: List[str], method: str = Query(DEFAULT_SENTIMENT_METHOD)):
+    """Valida múltiples textos en lote"""
+    if not texts:
+        raise HTTPException(status_code=400, detail="La lista de textos no puede estar vacía")
+    
+    if len(texts) > 50:
+        raise HTTPException(status_code=400, detail="Máximo 50 textos por lote")
+    
+    results = []
+    for text in texts:
+        try:
+            # Validar entrada
+            validation_result = validate_input(text)
+            if not validation_result["is_valid"]:
+                results.append({
+                    "text": text,
+                    "error": validation_result["errors"][0],
+                    "valid": False
+                })
+                continue
+            
+            # Analizar emoción
+            emotion_result = analyze_emotion(text, method)
+            
+            # Detectar groserías
+            profanity_result = detect_profanity(text)
+            
+            # Determinar si es ofensivo
+            is_offensive = emotion_result["score"] < 0.4 or profanity_result["has_profanity"]
+            
+            results.append({
+                "text": text,
+                "is_offensive": is_offensive,
+                "emotion_score": emotion_result["score"],
+                "emotion_label": emotion_result["label"],
+                "profanity_count": profanity_result["profanity_count"],
+                "valid": True
+            })
+            
+        except Exception as e:
+            results.append({
+                "text": text,
+                "error": str(e),
+                "valid": False
+            })
+    
+    return {
+        "method": method,
+        "total_texts": len(texts),
+        "valid_texts": len([r for r in results if r["valid"]]),
+        "results": results
+    }
 
 if __name__ == "__main__":
     import uvicorn
