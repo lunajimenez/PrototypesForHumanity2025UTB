@@ -4,8 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import torch
 from transformers import pipeline
-from spanlp.palabrotas import Palabrotas
-from spanlp.normalizer import Normalizer
+from spanlp.palabrota import Palabrota
 from textblob import TextBlob
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import re
@@ -67,8 +66,7 @@ sentiment_analyzer = pipeline(
 )
 
 # Inicializar spanlp para detección de groserías
-profanity_detector = Palabrotas()
-normalizer = Normalizer()
+profanity_detector = Palabrota()
 
 # Inicializar VADER para análisis rápido
 vader_analyzer = SentimentIntensityAnalyzer()
