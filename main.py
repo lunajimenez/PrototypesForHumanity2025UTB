@@ -7,6 +7,7 @@ from transformers import pipeline
 from spanlp.palabrota import Palabrota
 from textblob import TextBlob
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from spanlp.domain.strategies import JaccardIndex
 import re
 import time
 from config import SENTIMENT_MODELS, DEFAULT_SENTIMENT_METHOD, SENTIMENT_ANALYSIS_CONFIG
@@ -67,7 +68,7 @@ sentiment_analyzer = pipeline(
 
 # Inicializar spanlp para detección de groserías
 profanity_detector = Palabrota()
-
+jaccard = JaccardIndex(threshold=0.9, normalize=True, n_gram=1)
 # Inicializar VADER para análisis rápido
 vader_analyzer = SentimentIntensityAnalyzer()
 
@@ -167,10 +168,10 @@ def detect_profanity(text: str) -> Dict[str, Any]:
     """Detecta groserías usando spanlp"""
     try:
         # Normalizar el texto
-        normalized_text = normalizer.normalize(text)
+        jaccard = JaccardIndex(threshold=0.9, normalize=True, n_gram=1)
         
         # Detectar groserías
-        profanity_words = profanity_detector.palabrotas(normalized_text)
+        profanity_words = profanity_detector.palabrotas(jaccard.normalize(text))
         
         # Contar groserías
         profanity_count = len(profanity_words)
